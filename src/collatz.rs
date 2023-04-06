@@ -41,7 +41,7 @@ impl std::fmt::Display for CollatzNode {
 
 pub struct Collatz {
     kind: CollatzKind,
-    tree: NonNull<CollatzNode>,
+    root: NonNull<CollatzNode>,
     nodes: HashMap<u64, NonNull<CollatzNode>>,
     _boo: PhantomData<CollatzNode>,
 }
@@ -52,7 +52,7 @@ impl Default for Collatz {
         let nodes = HashMap::from([(1, head)]);
         Self {
             kind: CollatzKind::Full,
-            tree: head,
+            root: head,
             nodes,
             _boo: PhantomData,
         }
@@ -65,10 +65,14 @@ impl Collatz {
         let nodes = HashMap::from([(1, head)]);
         Self {
             kind,
-            tree: head,
+            root: head,
             nodes,
             _boo: PhantomData,
         }
+    }
+
+    pub fn kind(&self) -> CollatzKind {
+        self.kind
     }
 
     pub fn contains(&self, n: &u64) -> bool {
@@ -224,7 +228,7 @@ impl Collatz {
     }
 
     pub fn generate_up(&mut self, max: u64) {
-        let mut node_stack = vec![self.tree];
+        let mut node_stack = vec![self.root];
         let mut count = 0;
         while !node_stack.is_empty() && count < 10 {
             count += 1;
@@ -305,8 +309,47 @@ impl Collatz {
         }
     }
 
+    pub fn iter(&self) -> Iter {
+        Iter::new(&self)
+    }
     pub fn into_iter(self) -> IntoIter {
         IntoIter::new(self)
+    }
+}
+
+struct Iter {
+    current_node: NonNull<CollatzNode>,
+    stack: VecDeque<NonNull<CollatzNode>>,
+}
+
+impl Iter {
+    fn new(collatz: &Collatz) -> Self {
+        let head_node = collatz.root;
+        Iter {
+            current_node: head_node,
+            stack: VecDeque::from([head_node]),
+        }
+    }
+}
+
+impl Iterator for Iter {
+    type Item = (usize, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.stack.is_empty() {
+            return None;
+        }
+        self.current_node = self.stack.pop_front().unwrap();
+
+        let node = unsafe { &*self.current_node.as_ptr() };
+        if let Some(node) = node.up1 {
+            self.stack.push_back(node);
+        }
+        if let Some(node) = node.up2 {
+            self.stack.push_back(node);
+        }
+
+        Some((node.depth, node.value))
     }
 }
 
@@ -317,7 +360,7 @@ struct IntoIter {
 
 impl IntoIter {
     fn new(collatz: Collatz) -> Self {
-        let head_node = collatz.tree;
+        let head_node = collatz.root;
         IntoIter {
             current_node: head_node,
             stack: VecDeque::from([head_node]),
@@ -437,6 +480,20 @@ mod test {
     fn generate_single_down() {
         let mut collatz = Collatz::default();
         collatz.generate_down(6);
+        itertools::assert_equal(
+            collatz.iter(),
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 5),
+                (6, 10),
+                (7, 3),
+                (8, 6),
+            ],
+        );
         itertools::assert_equal(
             collatz.into_iter(),
             [
