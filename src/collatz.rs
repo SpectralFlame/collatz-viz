@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::ptr::NonNull;
 use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CollatzKind {
@@ -79,44 +79,98 @@ impl Collatz {
 
     pub fn down(&self, n: u64) -> u64 {
         match &self.kind {
-            CollatzKind::Full => {
-                if n % 2 == 0 {
-                    return n / 2;
-                } else {
-                    return n * 3 + 1;
-                }
+            CollatzKind::Full => match n % 2 {
+                0 => n / 2,
+                1 => n * 3 + 1,
+                _ => unreachable!(),
             },
-            CollatzKind::Short => {
-                if n % 2 == 0 {
-                    return n / 2;
-                } else {
-                    return (n * 3 + 1) / 2;
-                }
+            CollatzKind::Short => match n % 2 {
+                0 => n / 2,
+                1 => (n * 3 + 1) / 2,
+                _ => unreachable!(),
             },
-            CollatzKind::Odd => todo!(),
-            CollatzKind::Compact => todo!(),
+            CollatzKind::Odd => {
+                match n % 8 {
+                    5 => n / 4, // integer arithmetic for (n - 1) / 4
+                    3 | 7 => (3 * n + 1) / 2,
+                    1 => (3 * n + 1) / 4,
+                    _ => unreachable!(),
+                }
+            }
+            CollatzKind::Compact => {
+                // match n % 12 {
+                //     7 | 11 => (3 * n + 1) / 2,
+                //     n => match n % 24 {
+                //         5 => n / 4,                    // (n - 1) / 4
+                //         1 | 17 => (3 * n + 1) / 4,
+                //         n => match n % 96 {
+                //             85 => n / 16,              // (n - 5) / 16
+                //             13 | 61 => (3 * n + 1) / 8,
+                //             37 => (3 * n + 1) / 16,
+                //             _ => unreachable!(),
+                //         }
+                //     }
+                // }
+
+                match n % 96 {
+                    5 | 29 | 53 | 77 => n / 4, // (n - 1) / 4
+                    85 => n / 16,              // (n - 5) / 16
+                    7 | 11 | 19 | 23 | 31 | 35 | 43 | 47 | 55 | 59 | 67 | 71 | 79 | 83 | 91
+                    | 95 => (3 * n + 1) / 2,
+                    1 | 17 | 25 | 41 | 49 | 65 | 73 | 89 => (3 * n + 1) / 4,
+                    13 | 61 => (3 * n + 1) / 8,
+                    37 => (3 * n + 1) / 16,
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
     pub fn up(&self, n: u64) -> (u64, Option<u64>) {
         match &self.kind {
             CollatzKind::Full => {
-                if n % 3 == 1 && n > 8 {
-                    // `n / 3` is equivalent to `(n - 1) / 3` due to integer arithmetic
-                    return (n * 2, Some(n / 3)); 
-                } else {
-                    return (n * 2, None);
+                // n = 3 * (2m + 1) + 1 = 6m + 4        =>  n % 6 == 4
+                match n % 6 {
+                    4 => (n * 2, Some(n / 3)), // (n - 1) / 3
+                    _ => (n * 2, None),
                 }
-            },
+            }
             CollatzKind::Short => {
-                if n % 3 == 2 {
-                    return (n * 2, Some(2 * n / 3));
-                } else {
-                    return (n * 2, None);
+                // n = (3(2m + 1) + 1) / 2 = 3m + 2     =>  n % 3 == 2
+                match n % 3 {
+                    2 => (n * 2, Some(n * 2 / 3)),
+                    _ => (n * 2, None),
                 }
-            },
-            CollatzKind::Odd => todo!(),
-            CollatzKind::Compact => todo!(),
+            }
+            CollatzKind::Odd => {
+                // n = ((8m+5) - 1) / 4 = 2m + 1        =>  n % 2 == 1
+                // n = (3(8m + 3) + 1) / 2 = 12m + 5    =>  n % 12 == 5
+                // n = (3(8m + 7) + 1) / 2 = 12m + 11   =>  n % 12 == 11
+                // n = (3(8m + 1) + 1) / 4 = 6m + 1     =>  n % 6 == 1
+                match n % 12 {
+                    1 | 7 => (n * 4 + 1, Some(n * 4 / 3)),  // (n * 4 - 1) / 3
+                    5 | 11 => (n * 4 + 1, Some(n * 2 / 3)), // (n * 2 - 1) / 3
+                    3 | 9 => (n * 4 + 1, None),
+                    _ => unreachable!(),
+                }
+            }
+            CollatzKind::Compact => {
+                // n = ((24m + 5) - 1) / 4 = 6m + 1     =>  n % 6 == 1
+                // n = ((96m + 85) - 5) / 16 = 6m + 5   =>  n % 6 == 5
+                // n = (3(12m + 7) + 1) / 2 = 18m + 11  =>  n % 18 == 11
+                // n = (3(12m + 11) + 1) / 2 = 18m + 17 =>  n % 18 == 17
+                // n = (3(24m + 1) + 1) / 4 = 18m + 1   =>  n % 18 == 1
+                // n = (3(24m + 17) + 1) / 4 = 18m + 13 =>  n % 18 == 13
+                // n = (3(48m + 13) + 1) / 8 = 18m + 5  =>  n % 18 == 5
+                // n = (3(96m + 37) + 1) / 16 = 18m + 7 =>  n % 18 == 7
+                match n % 18 {
+                    11 | 17 => (n * 16 + 5, Some(n * 2 / 3)), // (n * 2 - 1) / 3
+                    1 | 13 => (n * 4 + 1, Some(n * 4 / 3)),   // (n * 4 - 1) / 3
+                    5 => (n * 16 + 5, Some(n * 8 / 3)),       // (n * 8 - 1) / 3
+                    7 => (n * 4 + 1, Some(n * 16 / 3)),       // (n * 16 - 1) / 3
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
@@ -172,9 +226,9 @@ impl Collatz {
 
                 if (*node.as_ptr()).up1.is_none() {
                     let (up1, up2) = self.up((*node.as_ptr()).value);
-                    if up1 <= max {
-                        let new_node = NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
-                        
+                    if up1 <= max && up1 != 1 {
+                        let new_node =
+                            NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up1 = Some(new_node);
 
@@ -183,11 +237,12 @@ impl Collatz {
                     }
 
                     if let Some(up2) = up2 {
-                        if up2 > max {
+                        if up2 > max || up2 == 1 {
                             continue;
                         }
-                        let new_node = NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
 
+                        let new_node =
+                            NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
@@ -195,18 +250,45 @@ impl Collatz {
                         node_stack.push(new_node);
                     }
                 } else if (*node.as_ptr()).up2.is_none() {
-                    if let (_, Some(up2)) = self.up((*node.as_ptr()).value) {
-                        if up2 > max {
+                    let existing = (*node.as_ptr()).up1.unwrap();
+                    node_stack.push(existing);
+
+                    let (up1, up2) = self.up((*node.as_ptr()).value);
+
+                    if (*existing.as_ptr()).value != up1 {
+                        // up2 is linked to up1, so link up1 to up2
+                        if up1 > max {
                             continue;
                         }
-                        let new_node = NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
+                        
+                        let new_node =
+                            NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
+                        (*node.as_ptr()).up2 = Some(new_node);
+                        (*new_node.as_ptr()).down = Some(node);
 
+                        self.nodes.insert(up1, new_node);
+                        node_stack.push(new_node);
+
+                        // No need to check up2 anymore
+                        continue;
+                    }
+
+                    if let Some(up2) = up2 {
+                        if up2 > max || up2 == 1 {
+                            continue;
+                        }
+
+                        let new_node =
+                            NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
                         self.nodes.insert(up2, new_node);
                         node_stack.push(new_node);
                     }
+                } else {
+                    node_stack.push((*node.as_ptr()).up1.unwrap());
+                    node_stack.push((*node.as_ptr()).up2.unwrap());
                 }
             }
         }
@@ -216,7 +298,6 @@ impl Collatz {
         IntoIter::new(self)
     }
 }
-
 
 struct IntoIter {
     current_node: NonNull<CollatzNode>,
@@ -249,18 +330,18 @@ impl Iterator for IntoIter {
         if let Some(node) = node.up2 {
             self.stack.push_back(node);
         }
-        
+
         Some(node.value)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use itertools;
     use super::*;
+    use itertools;
 
     #[test]
-    fn single_down() {
+    fn single_down_full() {
         let collatz = Collatz::default();
         assert_eq!(collatz.down(1), 4);
         assert_eq!(collatz.down(2), 1);
@@ -269,16 +350,76 @@ mod test {
     }
 
     #[test]
-    fn single_up() {
+    fn single_down_short() {
+        let collatz = Collatz::new(CollatzKind::Short);
+        assert_eq!(collatz.down(1), 2);
+        assert_eq!(collatz.down(2), 1);
+        assert_eq!(collatz.down(3), 5);
+        assert_eq!(collatz.down(4), 2);
+    }
+
+    #[test]
+    fn single_down_odd() {
+        let collatz = Collatz::new(CollatzKind::Odd);
+        assert_eq!(collatz.down(1), 1);
+        assert_eq!(collatz.down(3), 5);
+        assert_eq!(collatz.down(5), 1);
+        assert_eq!(collatz.down(7), 11);
+    }
+
+    #[test]
+    fn single_down_compact() {
+        let collatz = Collatz::new(CollatzKind::Compact);
+        assert_eq!(collatz.down(1), 1);
+        assert_eq!(collatz.down(5), 1);
+        assert_eq!(collatz.down(7), 11);
+        assert_eq!(collatz.down(11), 17);
+    }
+
+    #[test]
+    fn single_up_full() {
         let collatz = Collatz::default();
         assert_eq!(collatz.up(1), (2, None));
         assert_eq!(collatz.up(2), (4, None));
         assert_eq!(collatz.up(3), (6, None));
-        assert_eq!(collatz.up(4), (8, None));
+        assert_eq!(collatz.up(4), (8, Some(1)));
         assert_eq!(collatz.up(5), (10, None));
         assert_eq!(collatz.up(6), (12, None));
         assert_eq!(collatz.up(10), (20, Some(3)));
         assert_eq!(collatz.up(16), (32, Some(5)));
+        assert_eq!(collatz.up(22), (44, Some(7)));
+    }
+
+    #[test]
+    fn single_up_short() {
+        let collatz = Collatz::new(CollatzKind::Short);
+        assert_eq!(collatz.up(1), (2, None));
+        assert_eq!(collatz.up(2), (4, Some(1)));
+        assert_eq!(collatz.up(3), (6, None));
+        assert_eq!(collatz.up(4), (8, None));
+        assert_eq!(collatz.up(5), (10, Some(3)));
+        assert_eq!(collatz.up(11), (22, Some(7)));
+    }
+
+    #[test]
+    fn single_up_odd() {
+        let collatz = Collatz::new(CollatzKind::Odd);
+        assert_eq!(collatz.up(1), (5, Some(1)));
+        assert_eq!(collatz.up(3), (13, None));
+        assert_eq!(collatz.up(5), (21, Some(3)));
+        assert_eq!(collatz.up(7), (29, Some(9)));
+        assert_eq!(collatz.up(9), (37, None));
+    }
+
+    #[test]
+    fn single_up_compact() {
+        let collatz = Collatz::new(CollatzKind::Compact);
+        assert_eq!(collatz.up(1), (5, Some(1)));
+        assert_eq!(collatz.up(5), (85, Some(13)));
+        assert_eq!(collatz.up(7), (29, Some(37)));
+        assert_eq!(collatz.up(11), (181, Some(7)));
+        assert_eq!(collatz.up(13), (53, Some(17)));
+        assert_eq!(collatz.up(17), (277, Some(11)));
     }
 
     #[test]
@@ -293,13 +434,27 @@ mod test {
         let mut collatz = Collatz::default();
         collatz.generate_down(6);
         collatz.generate_down(80);
-        itertools::assert_equal(collatz.into_iter(), [1, 2, 4, 8, 16, 5, 10, 3, 20, 6, 40, 80]);
+        itertools::assert_equal(
+            collatz.into_iter(),
+            [1, 2, 4, 8, 16, 5, 10, 3, 20, 6, 40, 80],
+        );
     }
 
     #[test]
-    fn small_up() {
+    fn generate_single_up() {
         let mut collatz = Collatz::default();
         collatz.generate_up(16);
         itertools::assert_equal(collatz.into_iter(), [1, 2, 4, 8, 16, 5, 10, 3, 6, 12]);
+    }
+
+    #[test]
+    fn generate_mixed() {
+        let mut collatz = Collatz::default();
+        collatz.generate_down(80);
+        collatz.generate_up(16);
+        itertools::assert_equal(
+            collatz.into_iter(),
+            [1, 2, 4, 8, 16, 5, 10, 20, 3, 40, 6, 80, 12],
+        );
     }
 }
