@@ -10,15 +10,15 @@ pub enum CollatzKind {
     Compact,
 }
 
-type Link = Option<NonNull<CollatzNode>>;
+type Node = NonNull<CollatzNode>;
 
 #[derive(Debug)]
 struct CollatzNode {
     value: u64,
     depth: usize,
-    down: Link,
-    up1: Link,
-    up2: Link,
+    down: Option<Node>,
+    up1: Option<Node>,
+    up2: Option<Node>,
 }
 
 impl CollatzNode {
@@ -35,14 +35,14 @@ impl CollatzNode {
 
 impl std::fmt::Display for CollatzNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "({}, {})", self.depth, self.value)
     }
 }
 
 pub struct Collatz {
     kind: CollatzKind,
-    root: NonNull<CollatzNode>,
-    nodes: HashMap<u64, NonNull<CollatzNode>>,
+    root: Node,
+    nodes: HashMap<u64, Node>,
     _boo: PhantomData<CollatzNode>,
 }
 
@@ -79,7 +79,7 @@ impl Collatz {
         self.nodes.contains_key(n)
     }
 
-    fn get_node(&self, n: u64) -> Link {
+    fn get_node(&self, n: u64) -> Option<Node> {
         self.nodes.get(&n).copied()
     }
 
@@ -191,7 +191,7 @@ impl Collatz {
             // Tree already contains `n`.
             return;
         }
-        let mut prev_node: Option<NonNull<CollatzNode>> = None;
+        let mut prev_node: Option<Node> = None;
         unsafe {
             while !self.contains(&n) {
                 // Create a new node
@@ -289,7 +289,7 @@ impl Collatz {
                         self.nodes.insert(up1, new_node);
                         node_stack.push(new_node);
 
-                        // No need to check up2 anymore
+                        // No need to check `up2` anymore
                         continue;
                     }
 
@@ -313,6 +313,43 @@ impl Collatz {
                 }
             }
         }
+    }
+
+    // NOTE: Should the orbit of `n` be calculated instead of panicking?
+    pub fn get_depth(&self, n: u64) -> usize {
+        let node = self
+            .get_node(n)
+            .expect("the requested node has not yet been generated");
+        unsafe { (*node.as_ptr()).depth }
+    }
+
+    // NOTE: Should the orbit of `a` and `b` be calculated instead of panicking?
+    pub fn find_common_ancestor(&self, a: u64, b: u64) -> u64 {
+        let node_a = self
+            .get_node(a)
+            .expect("the requested node has not yet been generated");
+        let node_b = self
+            .get_node(b)
+            .expect("the requested node has not yet been generated");
+
+        unsafe {
+            let node = self.find_common_ancestor_unsafe(node_a, node_b);
+            (*node.as_ptr()).value
+        }
+    }
+
+    unsafe fn find_common_ancestor_unsafe(&self, mut a: Node, mut b: Node) -> Node {
+        while (*a.as_ptr()).depth < (*b.as_ptr()).depth {
+            b = (*b.as_ptr()).down.unwrap();
+        }
+        while (*a.as_ptr()).depth > (*b.as_ptr()).depth {
+            a = (*a.as_ptr()).down.unwrap();
+        }
+        while (*a.as_ptr()).value != (*b.as_ptr()).value {
+            a = (*a.as_ptr()).down.unwrap();
+            b = (*b.as_ptr()).down.unwrap();
+        }
+        return a;
     }
 
     pub fn iter(&self) -> Iter {
@@ -620,5 +657,25 @@ mod test {
                 (9, 12),
             ],
         );
+    }
+
+    #[test]
+    fn common_ancestor() {
+        let mut collatz = Collatz::default();
+        collatz.generate_down(22);
+        collatz.generate_down(69);
+        collatz.generate_down(70);
+        assert_eq!(collatz.find_common_ancestor(69, 70), 40);
+        assert_eq!(collatz.find_common_ancestor(22, 69), 52);
+        assert_eq!(collatz.find_common_ancestor(69, 69), 69);
+    }
+
+    #[test]
+    fn get_depth() {
+        let mut collatz = Collatz::default();
+        collatz.generate_down(69);
+        collatz.generate_down(420);
+        assert_eq!(collatz.get_depth(69), 14);
+        assert_eq!(collatz.get_depth(420), 40);
     }
 }
