@@ -180,6 +180,12 @@ impl Collatz {
         }
     }
 
+    pub fn generate_fill_down(&mut self, max: u64) {
+        for n in (1..=max).rev() {
+            self.generate_down(n);
+        }
+    }
+
     pub fn generate_down(&mut self, mut n: u64) {
         if self.contains(&n) {
             // Tree already contains `n`.
@@ -530,6 +536,39 @@ mod test {
                 (8, 6),
                 (8, 40),
                 (9, 80),
+            ],
+        );
+    }
+
+    #[test]
+    fn generate_fill_down() {
+        let mut collatz = Collatz::default();
+        collatz.generate_fill_down(10);
+        itertools::assert_equal(
+            collatz.into_iter(),
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 5),
+                (6, 10),
+                (7, 20),
+                (7, 3),
+                (8, 40),
+                (8, 6),
+                (9, 13),
+                (10, 26),
+                (11, 52),
+                (12, 17),
+                (13, 34),
+                (14, 11),
+                (15, 22),
+                (16, 7),
+                (17, 14),
+                (18, 28),
+                (19, 9),
             ],
         );
     }
