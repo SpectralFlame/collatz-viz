@@ -15,6 +15,7 @@ type Link = Option<NonNull<CollatzNode>>;
 #[derive(Debug)]
 struct CollatzNode {
     value: u64,
+    depth: usize,
     down: Link,
     up1: Link,
     up2: Link,
@@ -24,6 +25,7 @@ impl CollatzNode {
     pub fn new(value: u64) -> Self {
         CollatzNode {
             value,
+            depth: 0,
             down: None,
             up1: None,
             up2: None,
@@ -180,8 +182,8 @@ impl Collatz {
             return;
         }
         let mut prev_node: Option<NonNull<CollatzNode>> = None;
-        while !self.contains(&n) {
-            unsafe {
+        unsafe {
+            while !self.contains(&n) {
                 // Create a new node
                 let new_node = NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(n))));
 
@@ -197,22 +199,27 @@ impl Collatz {
 
                 prev_node = Some(new_node);
             }
-        }
 
-        // Merge created nodes to the found root node
-        if let Some(root_node) = self.get_node(n) {
-            unsafe {
-                if let Some(prev_node) = prev_node {
-                    (*prev_node.as_ptr()).down = Some(root_node);
-                    if (*root_node.as_ptr()).up1.is_none() {
-                        (*root_node.as_ptr()).up1 = Some(prev_node);
-                    } else {
-                        (*root_node.as_ptr()).up2 = Some(prev_node);
-                    }
+            // Merge created nodes to the found root node
+            let root_node = self.get_node(n).unwrap();
+
+            if let Some(prev_node) = prev_node {
+                (*prev_node.as_ptr()).down = Some(root_node);
+                if (*root_node.as_ptr()).up1.is_none() {
+                    (*root_node.as_ptr()).up1 = Some(prev_node);
+                } else {
+                    (*root_node.as_ptr()).up2 = Some(prev_node);
                 }
             }
-        } else {
-            unreachable!();
+
+            // Trace back to set the depth of newly created nodes
+            let mut depth = (*root_node.as_ptr()).depth;
+            while let Some(node) = prev_node {
+                depth += 1;
+                (*node.as_ptr()).depth = depth;
+                // All nodes are new, so they are linked to `up1`
+                prev_node = (*node.as_ptr()).up1;
+            }
         }
     }
 
@@ -229,6 +236,7 @@ impl Collatz {
                     if up1 <= max && up1 != 1 {
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
+                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up1 = Some(new_node);
 
@@ -243,6 +251,7 @@ impl Collatz {
 
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
+                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
@@ -260,9 +269,10 @@ impl Collatz {
                         if up1 > max {
                             continue;
                         }
-                        
+
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
+                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
                         (*node.as_ptr()).up2 = Some(new_node);
                         (*new_node.as_ptr()).down = Some(node);
 
@@ -280,6 +290,7 @@ impl Collatz {
 
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
+                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
@@ -315,7 +326,7 @@ impl IntoIter {
 }
 
 impl Iterator for IntoIter {
-    type Item = u64;
+    type Item = (usize, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.stack.is_empty() {
@@ -331,7 +342,7 @@ impl Iterator for IntoIter {
             self.stack.push_back(node);
         }
 
-        Some(node.value)
+        Some((node.depth, node.value))
     }
 }
 
@@ -426,7 +437,20 @@ mod test {
     fn generate_single_down() {
         let mut collatz = Collatz::default();
         collatz.generate_down(6);
-        itertools::assert_equal(collatz.into_iter(), [1, 2, 4, 8, 16, 5, 10, 3, 6]);
+        itertools::assert_equal(
+            collatz.into_iter(),
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 5),
+                (6, 10),
+                (7, 3),
+                (8, 6),
+            ],
+        );
     }
 
     #[test]
@@ -436,15 +460,45 @@ mod test {
         collatz.generate_down(80);
         itertools::assert_equal(
             collatz.into_iter(),
-            [1, 2, 4, 8, 16, 5, 10, 3, 20, 6, 40, 80],
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 5),
+                (6, 10),
+                (7, 3),
+                (7, 20),
+                (8, 6),
+                (8, 40),
+                (9, 80),
+            ],
         );
     }
 
     #[test]
     fn generate_single_up() {
         let mut collatz = Collatz::default();
-        collatz.generate_up(16);
-        itertools::assert_equal(collatz.into_iter(), [1, 2, 4, 8, 16, 5, 10, 3, 6, 12]);
+        collatz.generate_up(32);
+        itertools::assert_equal(
+            collatz.into_iter(),
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 32),
+                (5, 5),
+                (6, 10),
+                (7, 20),
+                (7, 3),
+                (8, 6),
+                (9, 12),
+                (10, 24),
+            ],
+        );
     }
 
     #[test]
@@ -454,7 +508,21 @@ mod test {
         collatz.generate_up(16);
         itertools::assert_equal(
             collatz.into_iter(),
-            [1, 2, 4, 8, 16, 5, 10, 20, 3, 40, 6, 80, 12],
+            [
+                (0, 1),
+                (1, 2),
+                (2, 4),
+                (3, 8),
+                (4, 16),
+                (5, 5),
+                (6, 10),
+                (7, 20),
+                (7, 3),
+                (8, 40),
+                (8, 6),
+                (9, 80),
+                (9, 12),
+            ],
         );
     }
 }
