@@ -1,13 +1,18 @@
+pub mod viz;
+
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
+use wasm_bindgen::prelude::wasm_bindgen;
+
+#[wasm_bindgen]
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CollatzKind {
-    Full,
-    Short,
-    Odd,
-    Compact,
+    Full = 0,
+    Short = 1,
+    Odd = 2,
+    Compact = 3,
 }
 
 type Node = NonNull<CollatzNode>;
@@ -182,6 +187,11 @@ impl Collatz {
 
     pub fn generate_fill_down(&mut self, max: u64) {
         for n in (1..=max).rev() {
+            match self.kind {
+                CollatzKind::Odd | CollatzKind::Compact if n % 2 == 0 => continue,
+                CollatzKind::Compact if n % 3 == 0 => continue,
+                _ => (),
+            }
             self.generate_down(n);
         }
     }
