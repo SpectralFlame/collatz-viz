@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Hello wasm-pack!</title>
+    <style>
+      body {
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+    <script src="./bootstrap.js"></script>
+    <input type="radio" id="plot_cad" name="plot" value="0" checked/>
+    <label for="plot_cad">Common Ancestor Dist</label>
+    <input type="radio" id="plot_hvr" name="plot" value="1"/>
+    <label for="plot_hvr">High value ratio</label>
+    <input type="radio" id="plot_orbit_length" name="plot" value="2"/>
+    <label for="plot_orbit_length">Orbit length</label>
+    <label>Max: </label><input id="max" type="number" value="10" min="1"/>
+    <input type="radio" id="full" name="collatz_kind" value="0" checked/>
+    <label for="full">Full</label>
+    <input type="radio" id="short" name="collatz_kind" value="1"/>
+    <label for="short">Short</label>
+    <input type="radio" id="odd" name="collatz_kind" value="2"/>
+    <label for="odd">Odd</label>
+    <input type="radio" id="compact" name="collatz_kind" value="3"/>
+    <label for="compact">Compact</label>
+    <canvas id="canvas"></canvas>
+  </body>
+</html>
