@@ -30,10 +30,26 @@ impl From<i32> for CollatzKind {
 
 type Node = NonNull<CollatzNode>;
 
-#[derive(Debug)]
-struct CollatzNode {
+#[derive(Debug, PartialEq)]
+struct NodeData {
     value: u64,
+    // Orbit stats
     depth: usize,
+    highest_point: u64,
+}
+impl From<(usize, u64, u64)> for NodeData {
+    fn from(value: (usize, u64, u64)) -> Self {
+        Self {
+            value: value.1,
+            depth: value.0,
+            highest_point: value.2,
+        }
+    }
+}
+
+struct CollatzNode {
+    data: NodeData,
+    // Node pointers
     down: Option<Node>,
     up1: Option<Node>,
     up2: Option<Node>,
@@ -42,8 +58,11 @@ struct CollatzNode {
 impl CollatzNode {
     pub fn new(value: u64) -> Self {
         CollatzNode {
-            value,
-            depth: 0,
+            data: NodeData {
+                value,
+                depth: 0,
+                highest_point: value,
+            },
             down: None,
             up1: None,
             up2: None,
@@ -53,7 +72,7 @@ impl CollatzNode {
 
 impl std::fmt::Display for CollatzNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.depth, self.value)
+        write!(f, "({}, {})", self.data.depth, self.data.value)
     }
 }
 
@@ -111,22 +130,6 @@ impl Collatz {
 
     fn get_node(&self, n: u64) -> Option<Node> {
         self.nodes.get(&n).copied()
-    }
-
-    pub fn get_orbit(&self, mut n: u64) -> Vec<u64> {
-        let mut node = self.get_node(n).unwrap();
-        unsafe {
-            let mut orbit = Vec::with_capacity(node.as_ref().depth);
-            loop {
-                orbit.push(n);
-                if n == 1 {
-                    break;
-                }
-                node = (*node.as_ptr()).down.unwrap();
-                n = (*node.as_ptr()).value;
-            }
-            orbit
-        }
     }
 
     pub fn down(&self, n: u64) -> u64 {
@@ -262,23 +265,26 @@ impl Collatz {
                 prev_node = Some(new_node);
             }
 
-            // Merge created nodes to the found root node
-            let root_node = self.get_node(n).unwrap();
+            // Merge created nodes to the found node
+            let merge_node = self.get_node(n).unwrap();
 
             if let Some(prev_node) = prev_node {
-                (*prev_node.as_ptr()).down = Some(root_node);
-                if (*root_node.as_ptr()).up1.is_none() {
-                    (*root_node.as_ptr()).up1 = Some(prev_node);
+                (*prev_node.as_ptr()).down = Some(merge_node);
+                if (*merge_node.as_ptr()).up1.is_none() {
+                    (*merge_node.as_ptr()).up1 = Some(prev_node);
                 } else {
-                    (*root_node.as_ptr()).up2 = Some(prev_node);
+                    (*merge_node.as_ptr()).up2 = Some(prev_node);
                 }
             }
 
-            // Trace back to set the depth of newly created nodes
-            let mut depth = (*root_node.as_ptr()).depth;
+            // Trace back to set the depth and highest_point of newly created nodes
+            let mut depth = (*merge_node.as_ptr()).data.depth;
+            let mut highest_point = (*merge_node.as_ptr()).data.highest_point;
             while let Some(node) = prev_node {
                 depth += 1;
-                (*node.as_ptr()).depth = depth;
+                highest_point = highest_point.max((*node.as_ptr()).data.value);
+                (*node.as_ptr()).data.depth = depth;
+                (*node.as_ptr()).data.highest_point = highest_point;
                 // All nodes are new, so they are linked to `up1`
                 prev_node = (*node.as_ptr()).up1;
             }
@@ -294,11 +300,12 @@ impl Collatz {
                 let node = node_stack.pop().unwrap();
 
                 if (*node.as_ptr()).up1.is_none() {
-                    let (up1, up2) = self.up((*node.as_ptr()).value);
+                    let (up1, up2) = self.up((*node.as_ptr()).data.value);
                     if up1 <= max && up1 != 1 {
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
-                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
+                        (*new_node.as_ptr()).data.depth = (*node.as_ptr()).data.depth + 1;
+                        (*new_node.as_ptr()).data.highest_point = up1.max((*node.as_ptr()).data.highest_point);
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up1 = Some(new_node);
 
@@ -313,7 +320,8 @@ impl Collatz {
 
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
-                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
+                        (*new_node.as_ptr()).data.depth = (*node.as_ptr()).data.depth + 1;
+                        (*new_node.as_ptr()).data.highest_point = up2.max((*node.as_ptr()).data.highest_point);
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
@@ -324,9 +332,9 @@ impl Collatz {
                     let existing = (*node.as_ptr()).up1.unwrap();
                     node_stack.push(existing);
 
-                    let (up1, up2) = self.up((*node.as_ptr()).value);
+                    let (up1, up2) = self.up((*node.as_ptr()).data.value);
 
-                    if (*existing.as_ptr()).value != up1 {
+                    if (*existing.as_ptr()).data.value != up1 {
                         // up2 is linked to up1, so link up1 to up2
                         if up1 > max {
                             continue;
@@ -334,7 +342,8 @@ impl Collatz {
 
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up1))));
-                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
+                        (*new_node.as_ptr()).data.depth = (*node.as_ptr()).data.depth + 1;
+                        (*new_node.as_ptr()).data.highest_point = up1.max((*node.as_ptr()).data.highest_point);
                         (*node.as_ptr()).up2 = Some(new_node);
                         (*new_node.as_ptr()).down = Some(node);
 
@@ -352,7 +361,8 @@ impl Collatz {
 
                         let new_node =
                             NonNull::new_unchecked(Box::into_raw(Box::new(CollatzNode::new(up2))));
-                        (*new_node.as_ptr()).depth = (*node.as_ptr()).depth + 1;
+                        (*new_node.as_ptr()).data.depth = (*node.as_ptr()).data.depth + 1;
+                        (*new_node.as_ptr()).data.highest_point = up2.max((*node.as_ptr()).data.highest_point);
                         (*new_node.as_ptr()).down = Some(node);
                         (*node.as_ptr()).up2 = Some(new_node);
 
@@ -372,7 +382,7 @@ impl Collatz {
         let node = self
             .get_node(n)
             .expect("the requested node has not yet been generated");
-        unsafe { (*node.as_ptr()).depth }
+        unsafe { (*node.as_ptr()).data.depth }
     }
 
     // NOTE: Should the orbit of `a` and `b` be calculated instead of panicking?
@@ -386,49 +396,78 @@ impl Collatz {
 
         unsafe {
             let node = self.find_common_ancestor_unsafe(node_a, node_b);
-            (*node.as_ptr()).value
+            (*node.as_ptr()).data.value
         }
     }
 
     unsafe fn find_common_ancestor_unsafe(&self, mut a: Node, mut b: Node) -> Node {
-        while (*a.as_ptr()).depth < (*b.as_ptr()).depth {
+        while (*a.as_ptr()).data.depth < (*b.as_ptr()).data.depth {
             b = (*b.as_ptr()).down.unwrap();
         }
-        while (*a.as_ptr()).depth > (*b.as_ptr()).depth {
+        while (*a.as_ptr()).data.depth > (*b.as_ptr()).data.depth {
             a = (*a.as_ptr()).down.unwrap();
         }
-        while (*a.as_ptr()).value != (*b.as_ptr()).value {
+        while (*a.as_ptr()).data.value != (*b.as_ptr()).data.value {
             a = (*a.as_ptr()).down.unwrap();
             b = (*b.as_ptr()).down.unwrap();
         }
         return a;
     }
 
+    pub fn iter_orbit(&self, n: u64) -> IterOrbit {
+        unsafe { IterOrbit::new(self.get_node(n).unwrap().as_ref()) }
+    }
     pub fn iter(&self) -> Iter {
         Iter::new(&self)
     }
-    pub fn into_iter(self) -> IntoIter {
-        IntoIter::new(self)
-    }
 }
 
-struct Iter {
-    current_node: NonNull<CollatzNode>,
-    stack: VecDeque<NonNull<CollatzNode>>,
+struct IterOrbit<'a> {
+    current_node: &'a CollatzNode,
 }
 
-impl Iter {
-    fn new(collatz: &Collatz) -> Self {
-        let head_node = collatz.root;
-        Iter {
-            current_node: head_node,
-            stack: VecDeque::from([head_node]),
+impl<'a> IterOrbit<'a> {
+    fn new(node: &'a CollatzNode) -> IterOrbit<'a> {
+        Self {
+            current_node: node,
         }
     }
 }
 
-impl Iterator for Iter {
-    type Item = (usize, u64);
+impl<'a> Iterator for IterOrbit<'a> {
+    type Item = &'a NodeData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            if self.current_node.down.is_none() {
+                return None;
+            }
+            let data = &self.current_node.data;
+            self.current_node = self.current_node.down.unwrap().as_ref();
+            Some(data)
+        }
+    }
+}
+
+struct Iter<'a> {
+    current_node: &'a CollatzNode,
+    stack: VecDeque<&'a CollatzNode>,
+}
+
+impl<'a> Iter<'a> {
+    fn new(collatz: &'a Collatz) -> Self {
+        unsafe {
+            let head_node = collatz.root.as_ref();
+            Iter {
+                current_node: head_node,
+                stack: VecDeque::from([head_node]),
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a NodeData;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.stack.is_empty() {
@@ -436,51 +475,17 @@ impl Iterator for Iter {
         }
         self.current_node = self.stack.pop_front().unwrap();
 
-        let node = unsafe { &*self.current_node.as_ptr() };
-        if let Some(node) = node.up1 {
-            self.stack.push_back(node);
-        }
-        if let Some(node) = node.up2 {
-            self.stack.push_back(node);
-        }
-
-        Some((node.depth, node.value))
-    }
-}
-
-struct IntoIter {
-    current_node: NonNull<CollatzNode>,
-    stack: VecDeque<NonNull<CollatzNode>>,
-}
-
-impl IntoIter {
-    fn new(collatz: Collatz) -> Self {
-        let head_node = collatz.root;
-        IntoIter {
-            current_node: head_node,
-            stack: VecDeque::from([head_node]),
-        }
-    }
-}
-
-impl Iterator for IntoIter {
-    type Item = (usize, u64);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.stack.is_empty() {
-            return None;
-        }
-        self.current_node = self.stack.pop_front().unwrap();
-
-        let node = unsafe { &*self.current_node.as_ptr() };
-        if let Some(node) = node.up1 {
-            self.stack.push_back(node);
-        }
-        if let Some(node) = node.up2 {
-            self.stack.push_back(node);
+        let node = self.current_node;
+        unsafe {
+            if let Some(node) = node.up1 {
+                self.stack.push_back(node.as_ref());
+            }
+            if let Some(node) = node.up2 {
+                self.stack.push_back(node.as_ref());
+            }
         }
 
-        Some((node.depth, node.value))
+        Some(&node.data)
     }
 }
 
@@ -578,29 +583,29 @@ mod test {
         itertools::assert_equal(
             collatz.iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 5),
-                (6, 10),
-                (7, 3),
-                (8, 6),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 3, 16).into(),
+                (8, 6, 16).into(),
             ],
         );
         itertools::assert_equal(
             collatz.into_iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 5),
-                (6, 10),
-                (7, 3),
-                (8, 6),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 3, 16).into(),
+                (8, 6, 16).into(),
             ],
         );
     }
@@ -613,18 +618,18 @@ mod test {
         itertools::assert_equal(
             collatz.into_iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 5),
-                (6, 10),
-                (7, 3),
-                (7, 20),
-                (8, 6),
-                (8, 40),
-                (9, 80),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 3, 16).into(),
+                (7, 20, 20).into(),
+                (8, 6, 16).into(),
+                (8, 40, 40).into(),
+                (9, 80, 80).into(),
             ],
         );
     }
@@ -636,28 +641,28 @@ mod test {
         itertools::assert_equal(
             collatz.into_iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 5),
-                (6, 10),
-                (7, 20),
-                (7, 3),
-                (8, 40),
-                (8, 6),
-                (9, 13),
-                (10, 26),
-                (11, 52),
-                (12, 17),
-                (13, 34),
-                (14, 11),
-                (15, 22),
-                (16, 7),
-                (17, 14),
-                (18, 28),
-                (19, 9),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 20, 20).into(),
+                (7, 3, 16).into(),
+                (8, 40, 40).into(),
+                (8, 6, 16).into(),
+                (9, 13, 40).into(),
+                (10, 26, 40).into(),
+                (11, 52, 52).into(),
+                (12, 17, 52).into(),
+                (13, 34, 52).into(),
+                (14, 11, 52).into(),
+                (15, 22, 52).into(),
+                (16, 7, 52).into(),
+                (17, 14, 52).into(),
+                (18, 28, 52).into(),
+                (19, 9, 52).into(),
             ],
         );
     }
@@ -669,19 +674,19 @@ mod test {
         itertools::assert_equal(
             collatz.into_iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 32),
-                (5, 5),
-                (6, 10),
-                (7, 20),
-                (7, 3),
-                (8, 6),
-                (9, 12),
-                (10, 24),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 32, 32).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 20, 20).into(),
+                (7, 3, 16).into(),
+                (8, 6, 16).into(),
+                (9, 12, 16).into(),
+                (10, 24, 24).into(),
             ],
         );
     }
@@ -694,19 +699,19 @@ mod test {
         itertools::assert_equal(
             collatz.into_iter(),
             [
-                (0, 1),
-                (1, 2),
-                (2, 4),
-                (3, 8),
-                (4, 16),
-                (5, 5),
-                (6, 10),
-                (7, 20),
-                (7, 3),
-                (8, 40),
-                (8, 6),
-                (9, 80),
-                (9, 12),
+                (0, 1, 1).into(),
+                (1, 2, 2).into(),
+                (2, 4, 4).into(),
+                (3, 8, 8).into(),
+                (4, 16, 16).into(),
+                (5, 5, 16).into(),
+                (6, 10, 16).into(),
+                (7, 20, 20).into(),
+                (7, 3, 16).into(),
+                (8, 40, 40).into(),
+                (8, 6, 16).into(),
+                (9, 80, 80).into(),
+                (9, 12, 16).into(),
             ],
         );
     }

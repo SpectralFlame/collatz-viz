@@ -53,11 +53,9 @@ impl CollatzViz {
                     continue;
                 }
             }
-            let orbit = collatz.get_orbit(n);
-            let orbit_length = orbit.len();
-            let above_count = orbit
-                .into_iter()
-                .filter(|&v| v > n)
+            let orbit_length = collatz.get_depth(n);
+            let above_count = collatz.iter_orbit(n)
+                .filter(|&v| v.value > n)
                 .count();
             let x = n as f64;
             let y = above_count as f64 / orbit_length as f64;
