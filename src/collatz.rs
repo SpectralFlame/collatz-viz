@@ -2,6 +2,7 @@ pub mod viz;
 
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
+use std::ops::Range;
 use std::ptr::NonNull;
 
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -13,6 +14,18 @@ pub enum CollatzKind {
     Short = 1,
     Odd = 2,
     Compact = 3,
+}
+
+impl From<i32> for CollatzKind {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => Self::Full,
+            1 => Self::Short,
+            2 => Self::Odd,
+            3 => Self::Compact,
+            _ => Self::Full,
+        }
+    }
 }
 
 type Node = NonNull<CollatzNode>;
@@ -48,6 +61,7 @@ pub struct Collatz {
     kind: CollatzKind,
     root: Node,
     nodes: HashMap<u64, Node>,
+    ranges: Vec<Range<u64>>,
     _boo: PhantomData<CollatzNode>,
 }
 
@@ -59,6 +73,7 @@ impl Default for Collatz {
             kind: CollatzKind::Full,
             root: head,
             nodes,
+            ranges: vec![Range { start: 1, end: 2 }],
             _boo: PhantomData,
         }
     }
@@ -72,6 +87,7 @@ impl Collatz {
             kind,
             root: head,
             nodes,
+            ranges: vec![Range { start: 1, end: 2 }],
             _boo: PhantomData,
         }
     }
@@ -81,7 +97,16 @@ impl Collatz {
     }
 
     pub fn contains(&self, n: &u64) -> bool {
-        self.nodes.contains_key(n)
+        // self.ranges.iter().any(|r| r.contains(n))
+        if self.ranges[0].contains(n) {
+            true
+        } else {
+            self.nodes.contains_key(n)
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
     }
 
     fn get_node(&self, n: u64) -> Option<Node> {
@@ -186,7 +211,7 @@ impl Collatz {
     }
 
     pub fn generate_fill_down(&mut self, max: u64) {
-        for n in (1..=max).rev() {
+        for n in (self.ranges[0].end..=max).rev() {
             match self.kind {
                 CollatzKind::Odd | CollatzKind::Compact if n % 2 == 0 => continue,
                 CollatzKind::Compact if n % 3 == 0 => continue,
@@ -194,6 +219,7 @@ impl Collatz {
             }
             self.generate_down(n);
         }
+        self.ranges[0].end = max + 1;
     }
 
     pub fn generate_down(&mut self, mut n: u64) {
