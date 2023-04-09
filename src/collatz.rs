@@ -113,6 +113,22 @@ impl Collatz {
         self.nodes.get(&n).copied()
     }
 
+    pub fn get_orbit(&self, mut n: u64) -> Vec<u64> {
+        let mut node = self.get_node(n).unwrap();
+        unsafe {
+            let mut orbit = Vec::with_capacity(node.as_ref().depth);
+            loop {
+                orbit.push(n);
+                if n == 1 {
+                    break;
+                }
+                node = (*node.as_ptr()).down.unwrap();
+                n = (*node.as_ptr()).value;
+            }
+            orbit
+        }
+    }
+
     pub fn down(&self, n: u64) -> u64 {
         match &self.kind {
             CollatzKind::Full => match n % 2 {
