@@ -4,6 +4,7 @@ use super::Collatz;
 
 pub mod common_ancestor_dist;
 pub mod fraction_above;
+pub mod orbit_length;
 
 #[wasm_bindgen]
 pub struct CollatzViz {
