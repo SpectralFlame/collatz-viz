@@ -6,5 +6,5 @@ pkg/
 wasm-pack.log
 tests/
 
-www/node_modules
-www/dist
+www/node_modules/
+www/dist/
