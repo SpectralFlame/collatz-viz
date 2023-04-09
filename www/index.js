@@ -17,6 +17,9 @@ function setupUI() {
   document.querySelectorAll("input").forEach(elem => {
     elem.addEventListener("input", updatePlot);
   });
+  document.querySelectorAll("select").forEach(elem => {
+    elem.addEventListener("input", updatePlot);
+  });
 }
 
 function setupCanvas() {
@@ -36,21 +39,23 @@ function updatePlot() {
   chart = null;
 
   let kind = CollatzKind.Full;
-  const checked_kind = document.querySelector('input[name="collatz_kind"]:checked').value;
-  switch (checked_kind) {
-    case "Short": kind = CollatzKind.Short; break;
-    case "Odd": kind = CollatzKind.Odd; break;
-    case "Compact": kind = CollatzKind.Compact; break;
+  const collatz_kind = document.querySelector("#collatz_kind").value;
+  switch (collatz_kind) {
+    case "1": kind = CollatzKind.Short; break;
+    case "2": kind = CollatzKind.Odd; break;
+    case "3": kind = CollatzKind.Compact; break;
     default: kind = CollatzKind.Full;
   }
 
-  const checked_plot = document.querySelector('input[name="plot"]:checked').value;
+  console.log("kind", kind);
+
+  const plot_type = document.querySelector("#plot_type").value;
 
   const start = performance.now();
-  switch (checked_plot) {
-    case '0': chart = viz.common_ancestor_dist("canvas", Number(checked_kind), Number(input_max.value)); break;
-    case '1': chart = viz.fraction_above("canvas", Number(checked_kind), Number(input_max.value)); break;
-    case '2': chart = viz.orbit_length("canvas", Number(checked_kind), Number(input_max.value)); break;
+  switch (plot_type) {
+    case '0': chart = viz.orbit_length("canvas", Number(collatz_kind), Number(input_max.value)); break;
+    case '1': chart = viz.fraction_above("canvas", Number(collatz_kind), Number(input_max.value)); break;
+    case '2': chart = viz.common_ancestor_dist("canvas", Number(collatz_kind), Number(input_max.value)); break;
     default: chart = null;
   }
   const end = performance.now();
